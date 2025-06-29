@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<strategy>
+  <name>Digit Tracker Dbot</name>
+  <description>Digit Tracker bot compatible with Digit Tracker Analysis Tool logic</description>
+  <bot>
+    <!-- Variables -->
+    <variables>
+      <variable name="digit_history" type="array" default="[]"/>
+      <variable name="match_count" type="map" default="{}"/>
+      <variable name="trade_type" type="string" default="matches"/>
+      <variable name="selected_index" type="string" default="volatility_100"/>
+      <variable name="most_predicted_digit" type="number" default="-1"/>
+    </variables>
+
+    <!-- On Tick - Update digit history and counts -->
+    <on_tick>
+      <!-- Get the last digit from the latest tick -->
+      <assign name="last_digit" expression="digit" />
+
+      <!-- Append digit to history -->
+      <script>
+        <![CDATA[
+          var history = JSON.parse(bot.getVariable('digit_history'));
+          history.push(last_digit);
+          if (history.length > 100) {
+            history.shift();
+          }
+          bot.setVariable('digit_history', JSON.stringify(history));
+        ]]>
+      </script>
+
+      <!-- Update match counts -->
+      <script>
+        <![CDATA[
+          var counts = bot.getVariable('match_count');
+          if (!counts) {
+            counts = {};
+          } else {
+            counts = JSON.parse(counts);
+          }
+          counts[last_digit] = (counts[last_digit] || 0) + 1;
+          if (bot.getVariable('digit_history').length > 100) {
+            var removed = JSON.parse(bot.getVariable('digit_history'))[0];
+            counts[removed] = (counts[removed] || 1) - 1;
+          }
+          bot.setVariable('match_count', JSON.stringify(counts));
+        ]]>
+      </script>
+
+      <!-- Find most predicted digit -->
+      <script>
+        <![CDATA[
+          var counts = JSON.parse(bot.getVariable('match_count'));
+          var maxCount = -1;
+          var predicted = -1;
+          for (var d in counts) {
+            if (counts[d] > maxCount) {
+              maxCount = counts[d];
+              predicted = parseInt(d);
+            }
+          }
+          bot.setVariable('most_predicted_digit', predicted);
+        ]]>
+      </script>
+    </on_tick>
+
+    <!-- On Contract Start -->
+    <on_start>
+      <!-- Select index and trade type inputs -->
+      <input name="selected_index" type="dropdown" options="volatility_10,volatility_25,volatility_50,volatility_75,volatility_100" default="volatility_100" />
+      <input name="trade_type" type="dropdown" options="matches,even_odd,over_under" default="matches" />
+
+      <!-- Main trade logic -->
+      <if condition="trade_type == 'matches'">
+        <purchase contract_type="DIGITMATCH" stake="1" digit="{{most_predicted_digit}}" />
+      </if>
+      <!-- Additional trade types could be added here -->
+    </on_start>
+  </bot>
+</strategy>
